@@ -1,143 +1,106 @@
-const http = require('http');
-const { v4: uuidv4 } = require('uuid');
+const express = require('express');
+const bodyParser = require('body-parser');
+const fs = require("fs");
 
-const server = require('../todoServer');
-const port = 3000;
-const baseUrl = `http://localhost:${port}`;
+const app = express();
 
-describe('Todo API', () => {
-  let createdTodoId;
-  let globalServer;
+app.use(bodyParser.json());
 
-  beforeAll((done) => {
-    if (globalServer) {
-        globalServer.close();
+function findIndex(arr, id) {
+  for (let i = 0; i < arr.length; i++) {
+    if (arr[i].id === id) return i;
+  }
+  return -1;
+}
+
+function removeAtIndex(arr, index) {
+  let newArray = [];
+  for (let i = 0; i < arr.length; i++) {
+    if (i !== index) newArray.push(arr[i]);
+  }
+  return newArray;
+}
+
+app.get('/todos', (req, res) => {
+  fs.readFile("todos.json", "utf8", function(err, data) {
+    if (err) throw err;
+    res.json(JSON.parse(data));
+  });
+});
+
+app.get('/todos/:id', (req, res) => {
+  fs.readFile("todos.json", "utf8", function(err, data) {
+    if (err) throw err;
+    const todos = JSON.parse(data);
+    const todoIndex = findIndex(todos, parseInt(req.params.id));
+    if (todoIndex === -1) {
+      res.status(404).send();
+    } else {
+      res.json(todos[todoIndex]);
     }
-    globalServer = server.listen(3000);
-    done()
   });
+});
 
-  afterAll((done) => {
-    globalServer.close(done);
-  });
-
-  const todo = {
-    title: 'New Todo',
-    description: 'A new todo item',
+app.post('/todos', function(req, res) {
+  const newTodo = {
+    id: Math.floor(Math.random() * 1000000), // unique random id
+    title: req.body.title,
+    description: req.body.description
   };
-
-  test('should create a new todo item', (done) => {
-    const options = {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    };
-
-    const req = http.request(`${baseUrl}/todos`, options, (res) => {
-      expect(res.statusCode).toBe(201);
-      let data = '';
-
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-
-      res.on('end', () => {
-        const response = JSON.parse(data);
-        expect(response.id).toBeTruthy();
-        createdTodoId = response.id;
-        done();
-      });
-    });
-
-    req.write(JSON.stringify(todo));
-    req.end();
-  });
-
-  test('should retrieve all todo items', (done) => {
-    http.get(`${baseUrl}/todos`, (res) => {
-      expect(res.statusCode).toBe(200);
-      let data = '';
-
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-
-      res.on('end', () => {
-        const todos = JSON.parse(data);
-        expect(Array.isArray(todos)).toBe(true);
-        expect(todos.length).toBe(1);
-        expect(todos[0].title).toBe(todo.title);
-        expect(todos[0].description).toBe(todo.description);
-        done();
-      });
-    });
-  });
-
-  test('should retrieve a specific todo item by ID', (done) => {
-    http.get(`${baseUrl}/todos/${createdTodoId}`, (res) => {
-      expect(res.statusCode).toBe(200);
-      let data = '';
-
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-
-      res.on('end', () => {
-        const todo = JSON.parse(data);
-        expect(todo.id).toBe(createdTodoId);
-        done();
-      });
-    });
-  });
-
-  test('should update a specific todo item', (done) => {
-    const updatedTodo = {
-      title: 'Updated Todo',
-      description: 'An updated todo item',
-    };
-
-    const options = {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    };
-
-    const req = http.request(
-      `${baseUrl}/todos/${createdTodoId}`,
-      options,
-      (res) => {
-        expect(res.statusCode).toBe(200);
-        done();
-      }
-    );
-
-    req.write(JSON.stringify(updatedTodo));
-    req.end();
-  });
-
-  test('should delete a specific todo item', (done) => {
-    const options = {
-      method: 'DELETE',
-    };
-
-    const req = http.request(
-      `${baseUrl}/todos/${createdTodoId}`,
-      options,
-      (res) => {
-        expect(res.statusCode).toBe(200);
-        done();
-      }
-    );
-
-    req.end();
-  });
-
-  test('should return 404 for a non-existent todo item', (done) => {
-    http.get(`${baseUrl}/todos/${uuidv4()}`, (res) => {
-      expect(res.statusCode).toBe(404);
-      done();
+  fs.readFile("todos.json", "utf8", (err, data) => {
+    if (err) throw err;
+    const todos = JSON.parse(data);
+    todos.push(newTodo);
+    fs.writeFile("todos.json", JSON.stringify(todos), (err) => {
+      if (err) throw err;
+      res.status(201).json(newTodo);
     });
   });
 });
+
+app.put('/todos/:id', function(req, res) {
+  fs.readFile("todos.json", "utf8", (err, data) => {
+    if (err) throw err;
+    const todos = JSON.parse(data);
+    const todoIndex = findIndex(todos, parseInt(req.params.id));
+    if (todoIndex === -1) {
+      res.status(404).send();
+    } else {
+      const updatedTodo = {
+        id: todos[todoIndex].id,
+        title: req.body.title,
+        description: req.body.description
+      };
+      todos[todoIndex] = updatedTodo;
+      fs.writeFile("todos.json", JSON.stringify(todos), (err) => {
+        if (err) throw err;
+        res.status(200).json(updatedTodo);
+      });
+    }
+  });
+});
+
+app.delete('/todos/:id', function(req, res) {
+
+  fs.readFile("todos.json", "utf8", (err, data) => {
+    if (err) throw err;
+    let todos = JSON.parse(data);
+    const todoIndex = findIndex(todos, parseInt(req.params.id));
+    if (todoIndex === -1) {
+      res.status(404).send();
+    } else {
+      todos = removeAtIndex(todos, todoIndex);
+      fs.writeFile("todos.json", JSON.stringify(todos), (err) => {
+        if (err) throw err;
+        res.status(200).send();
+      });
+    }
+  });
+});
+
+// for all other routes, return 404
+app.use((req, res, next) => {
+  res.status(404).send();
+});
+
+module.exports = app;
